@@ -24,6 +24,13 @@ import com.surendramaran.yolov8tflite.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+/**
+ * Hosts the camera preview and streams frames to [Detector].
+ *
+ * Uses CameraX [Preview] plus [ImageAnalysis] (RGBA, keep-latest) on a background executor.
+ * Detection results update the preview overlay and the helmet/vest checklist when class names
+ * match `helmet` and `vest` (see asset path [Constants.LABELS_PATH]).
+ */
 class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private lateinit var binding: ActivityMainBinding
     private val isFrontCamera = false
@@ -53,6 +60,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
+    /** Obtains [ProcessCameraProvider] and binds use cases on the main thread. */
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
@@ -61,6 +69,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    /** Configures back camera, preview, and analyzer; wires analyzer output to [detector]. */
     private fun bindCameraUseCases() {
         val cameraProvider = cameraProvider ?: throw IllegalStateException("Camera initialization failed.")
 
@@ -162,6 +171,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         ).toTypedArray()
     }
 
+    /** Clears overlay and resets checklist when no boxes pass thresholds. */
     override fun onEmptyDetect() {
         runOnUiThread {
             binding.overlay.invalidate()
@@ -169,6 +179,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }
     }
 
+    /** Updates checklist from class names and refreshes [binding.overlay] with [boundingBoxes]. */
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
         runOnUiThread {
             val helmetDetected = boundingBoxes.any { it.clsName == "helmet" }
@@ -184,6 +195,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }
     }
 
+    /** Reflects PPE detection state and a floor on the confidence percentage shown in the UI. */
     private fun updateChecklist(helmetDetected: Boolean, vestDetected: Boolean, confidence: Float) {
         if (confidence > 0f) {
             val displayPct = maxOf(80f, confidence * 100)

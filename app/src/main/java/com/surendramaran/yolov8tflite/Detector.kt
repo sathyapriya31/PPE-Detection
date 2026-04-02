@@ -16,6 +16,18 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 
+/**
+ * Loads a YOLO-style TensorFlow Lite model from assets and runs inference on camera frames.
+ *
+ * Assumes a single float input image tensor and a float output tensor shaped roughly as
+ * `[1, numChannel, numElements]` where the first four channels per anchor are box parameters
+ * (cx, cy, w, h) and remaining channels are class scores — matching common YOLOv8 TFLite exports.
+ * Raw candidates are filtered by [CONFIDENCE_THRESHOLD] and merged with NMS using [IOU_THRESHOLD].
+ *
+ * @param modelPath Asset path to the `.tflite` file (e.g. [Constants.MODEL_PATH]).
+ * @param labelPath Asset path to `labels.txt`, one class name per line in training order.
+ * @param detectorListener Receives either [DetectorListener.onDetect] or [DetectorListener.onEmptyDetect].
+ */
 class Detector(
     private val context: Context,
     private val modelPath: String,
@@ -36,6 +48,7 @@ class Detector(
         .add(CastOp(INPUT_IMAGE_TYPE))
         .build()
 
+    /** Loads the model, reads label lines, and caches input/output tensor dimensions. */
     fun setup() {
         val model = FileUtil.loadMappedFile(context, modelPath)
         val options = Interpreter.Options()
@@ -67,11 +80,16 @@ class Detector(
         }
     }
 
+    /** Releases the [Interpreter]; call from [android.app.Activity.onDestroy] or equivalent. */
     fun clear() {
         interpreter?.close()
         interpreter = null
     }
 
+    /**
+     * Resizes [frame] to the model input size, normalizes, runs inference, then decodes boxes.
+     * Invokes the listener on the calling thread (typically the camera executor).
+     */
     fun detect(frame: Bitmap) {
         interpreter ?: return
         if (tensorWidth == 0) return
@@ -104,6 +122,10 @@ class Detector(
         detectorListener.onDetect(bestBoxes, inferenceTime)
     }
 
+    /**
+     * Decodes YOLO-style output into normalized boxes, drops low-confidence entries,
+     * and returns NMS-suppressed results or null if nothing remains.
+     */
     private fun bestBox(array: FloatArray) : List<BoundingBox>? {
 
         val boundingBoxes = mutableListOf<BoundingBox>()
@@ -152,6 +174,7 @@ class Detector(
         return applyNMS(boundingBoxes)
     }
 
+    /** Greedy NMS: keeps highest-confidence boxes and removes overlaps above [IOU_THRESHOLD]. */
     private fun applyNMS(boxes: List<BoundingBox>) : MutableList<BoundingBox> {
         val sortedBoxes = boxes.sortedByDescending { it.cnf }.toMutableList()
         val selectedBoxes = mutableListOf<BoundingBox>()
@@ -174,6 +197,7 @@ class Detector(
         return selectedBoxes
     }
 
+    /** Intersection-over-union for two normalized axis-aligned boxes. */
     private fun calculateIoU(box1: BoundingBox, box2: BoundingBox): Float {
         val x1 = maxOf(box1.x1, box2.x1)
         val y1 = maxOf(box1.y1, box2.y1)
@@ -185,8 +209,11 @@ class Detector(
         return intersectionArea / (box1Area + box2Area - intersectionArea)
     }
 
+    /** Callbacks for a single frame’s detection outcome. */
     interface DetectorListener {
+        /** No object passed the confidence filter after decoding / NMS. */
         fun onEmptyDetect()
+        /** Final detections for this frame and wall-clock inference duration in milliseconds. */
         fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long)
     }
 

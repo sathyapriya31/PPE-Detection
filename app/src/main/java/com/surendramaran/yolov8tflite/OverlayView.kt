@@ -9,6 +9,12 @@ import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 
+/**
+ * Transparent overlay on top of the camera preview that draws [BoundingBox] results.
+ *
+ * Coordinates are **normalized** (0–1); they are scaled by this view’s width and height in [draw].
+ * Known class names get friendly labels and color hints for “compliant” vs “violation” styles.
+ */
 class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
     private var results = listOf<BoundingBox>()
@@ -22,6 +28,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         initPaints()
     }
 
+    /** Resets paints and clears the canvas state for a fresh drawing pass. */
     fun clear() {
         textPaint.reset()
         textBackgroundPaint.reset()
@@ -89,6 +96,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         }
     }
 
+    /** Replaces the current detections and requests a redraw. */
     fun setResults(boundingBoxes: List<BoundingBox>) {
         results = boundingBoxes
         invalidate()
