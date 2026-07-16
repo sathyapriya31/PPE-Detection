@@ -42,6 +42,7 @@ class Detector(
     private var tensorHeight = 0
     private var numChannel = 0
     private var numElements = 0
+    private var isModelNCHW = false
 
     private val imageProcessor = ImageProcessor.Builder()
         .add(NormalizeOp(INPUT_MEAN, INPUT_STANDARD_DEVIATION))
@@ -58,8 +59,15 @@ class Detector(
         val inputShape = interpreter?.getInputTensor(0)?.shape() ?: return
         val outputShape = interpreter?.getOutputTensor(0)?.shape() ?: return
 
-        tensorWidth = inputShape[1]
-        tensorHeight = inputShape[2]
+        if (inputShape[1] == 3) {
+            isModelNCHW = true
+            tensorWidth = inputShape[3]
+            tensorHeight = inputShape[2]
+        } else {
+            isModelNCHW = false
+            tensorWidth = inputShape[2]
+            tensorHeight = inputShape[1]
+        }
         numChannel = outputShape[1]
         numElements = outputShape[2]
 
@@ -101,10 +109,14 @@ class Detector(
 
         val resizedBitmap = Bitmap.createScaledBitmap(frame, tensorWidth, tensorHeight, false)
 
-        val tensorImage = TensorImage(DataType.FLOAT32)
-        tensorImage.load(resizedBitmap)
-        val processedImage = imageProcessor.process(tensorImage)
-        val imageBuffer = processedImage.buffer
+        val imageBuffer = if (isModelNCHW) {
+            convertBitmapToNCHWBuffer(resizedBitmap)
+        } else {
+            val tensorImage = TensorImage(DataType.FLOAT32)
+            tensorImage.load(resizedBitmap)
+            val processedImage = imageProcessor.process(tensorImage)
+            processedImage.buffer
+        }
 
         val output = TensorBuffer.createFixedSize(intArrayOf(1 , numChannel, numElements), OUTPUT_IMAGE_TYPE)
         interpreter?.run(imageBuffer, output.buffer)
@@ -120,6 +132,36 @@ class Detector(
         }
 
         detectorListener.onDetect(bestBoxes, inferenceTime)
+    }
+
+    private fun convertBitmapToNCHWBuffer(bitmap: Bitmap): java.nio.ByteBuffer {
+        val byteBuffer = java.nio.ByteBuffer.allocateDirect(1 * 3 * tensorWidth * tensorHeight * 4)
+        byteBuffer.order(java.nio.ByteOrder.nativeOrder())
+
+        val intValues = IntArray(tensorWidth * tensorHeight)
+        bitmap.getPixels(intValues, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+
+        // Red Channel
+        for (i in 0 until tensorWidth * tensorHeight) {
+            val pixel = intValues[i]
+            val r = (((pixel shr 16) and 0xFF) - INPUT_MEAN) / INPUT_STANDARD_DEVIATION
+            byteBuffer.putFloat(r)
+        }
+        // Green Channel
+        for (i in 0 until tensorWidth * tensorHeight) {
+            val pixel = intValues[i]
+            val g = (((pixel shr 8) and 0xFF) - INPUT_MEAN) / INPUT_STANDARD_DEVIATION
+            byteBuffer.putFloat(g)
+        }
+        // Blue Channel
+        for (i in 0 until tensorWidth * tensorHeight) {
+            val pixel = intValues[i]
+            val b = ((pixel and 0xFF) - INPUT_MEAN) / INPUT_STANDARD_DEVIATION
+            byteBuffer.putFloat(b)
+        }
+
+        byteBuffer.rewind()
+        return byteBuffer
     }
 
     /**
@@ -222,7 +264,7 @@ class Detector(
         private const val INPUT_STANDARD_DEVIATION = 255f
         private val INPUT_IMAGE_TYPE = DataType.FLOAT32
         private val OUTPUT_IMAGE_TYPE = DataType.FLOAT32
-        private const val CONFIDENCE_THRESHOLD = 0.3F
+        private const val CONFIDENCE_THRESHOLD = 0.5F
         private const val IOU_THRESHOLD = 0.5F
     }
 }

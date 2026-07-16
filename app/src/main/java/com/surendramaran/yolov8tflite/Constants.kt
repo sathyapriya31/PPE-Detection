@@ -7,7 +7,7 @@ package com.surendramaran.yolov8tflite
  */
 object Constants {
     /** Filename of the TensorFlow Lite model in assets. */
-    const val MODEL_PATH = "model.tflite"
+    const val MODEL_PATH = "ppe_css.tflite"
     /** Text file with one class name per line, order matching the model’s class indices. */
-    const val LABELS_PATH = "labels.txt"
+    const val LABELS_PATH = "labels_css.txt"
 }

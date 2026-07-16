@@ -28,8 +28,9 @@ import java.util.concurrent.Executors
  * Hosts the camera preview and streams frames to [Detector].
  *
  * Uses CameraX [Preview] plus [ImageAnalysis] (RGBA, keep-latest) on a background executor.
- * Detection results update the preview overlay and the helmet/vest checklist when class names
- * match `helmet` and `vest` (see asset path [Constants.LABELS_PATH]).
+ * Detection results update the preview overlay and the helmet/vest checklist from the
+ * `Hardhat`/`Safety Vest` classes and their `NO-` violation counterparts
+ * (see asset path [Constants.LABELS_PATH]).
  */
 class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private lateinit var binding: ActivityMainBinding
@@ -174,7 +175,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     /** Clears overlay and resets checklist when no boxes pass thresholds. */
     override fun onEmptyDetect() {
         runOnUiThread {
-            binding.overlay.invalidate()
+            binding.overlay.setResults(emptyList())
             updateChecklist(helmetDetected = false, vestDetected = false, confidence = 0f)
         }
     }
@@ -182,8 +183,15 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     /** Updates checklist from class names and refreshes [binding.overlay] with [boundingBoxes]. */
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
         runOnUiThread {
-            val helmetDetected = boundingBoxes.any { it.clsName == "helmet" }
-            val vestDetected = boundingBoxes.any { it.clsName == "vest" }
+            boundingBoxes.forEach {
+                Log.d("Detector", "Detected: ${it.clsName} with confidence ${it.cnf}")
+            }
+            // An explicit violation (NO-Hardhat / NO-Safety Vest) wins over a positive
+            // detection: with several people in frame, one uncovered head means non-compliance.
+            val helmetDetected = boundingBoxes.any { it.clsName.equals("hardhat", ignoreCase = true) } &&
+                    boundingBoxes.none { it.clsName.equals("no-hardhat", ignoreCase = true) }
+            val vestDetected = boundingBoxes.any { it.clsName.equals("safety vest", ignoreCase = true) } &&
+                    boundingBoxes.none { it.clsName.equals("no-safety vest", ignoreCase = true) }
             val maxConfidence = boundingBoxes.maxOfOrNull { it.cnf } ?: 0f
 
             updateChecklist(helmetDetected, vestDetected, maxConfidence)
@@ -195,11 +203,10 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }
     }
 
-    /** Reflects PPE detection state and a floor on the confidence percentage shown in the UI. */
+    /** Reflects PPE detection state and the confidence percentage shown in the UI. */
     private fun updateChecklist(helmetDetected: Boolean, vestDetected: Boolean, confidence: Float) {
         if (confidence > 0f) {
-            val displayPct = maxOf(80f, confidence * 100)
-            binding.confidenceText.text = String.format("%.1f%%", displayPct)
+            binding.confidenceText.text = String.format("%.1f%%", confidence * 100)
         } else {
             binding.confidenceText.text = "--"
         }

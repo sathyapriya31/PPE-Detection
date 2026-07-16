@@ -62,7 +62,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             val right = it.x2 * width
             val bottom = it.y2 * height
 
-            val isDangerous = it.clsName == "no-helmet" || it.clsName == "no-vest"
+            val isDangerous = it.clsName.startsWith("no-", ignoreCase = true) || it.clsName.startsWith("no_", ignoreCase = true)
             val boxColor = if (isDangerous) Color.parseColor("#FF3B3B") else Color.parseColor("#4A9EFF")
             boxPaint.color = boxColor
 
@@ -71,11 +71,16 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             canvas.drawRoundRect(boxRect, CORNER_RADIUS, CORNER_RADIUS, boxPaint)
 
             // Format label text
-            val labelText = when (it.clsName) {
-                "helmet" -> "HELMET DETECTED"
-                "vest" -> "VEST DETECTED"
-                "no-helmet" -> "NO HELMET"
-                "no-vest" -> "NO VEST"
+            val labelText = when (it.clsName.lowercase()) {
+                "hardhat", "helmet" -> "HELMET DETECTED"
+                "safety vest", "vest" -> "VEST DETECTED"
+                "no-hardhat", "no-helmet" -> "NO HELMET"
+                "no-safety vest", "no-vest" -> "NO VEST"
+                "no-mask" -> "NO MASK"
+                "gloves" -> "GLOVES DETECTED"
+                "goggles" -> "GOGGLES DETECTED"
+                "mask" -> "MASK DETECTED"
+                "safety_shoe" -> "SAFETY SHOES DETECTED"
                 "person" -> "PERSON"
                 else -> it.clsName.uppercase()
             }

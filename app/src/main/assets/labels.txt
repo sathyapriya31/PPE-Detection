@@ -1,5 +1,6 @@
+Gloves
+Vest
+goggles
 helmet
-no-helmet
-no-vest
-person
-vest
+mask
+safety_shoe
